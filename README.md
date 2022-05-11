@@ -13,7 +13,7 @@ Online site: [https://pymancala-ai.netlify.app/](https://pymancala-ai.netlify.ap
 - Add a toggle to switch between strict and non strict mancala rules.
 - Add a slider for depth of search.
 - Add a toggle for player 1 and player 2 to switch between human and AI.
-- Export the <py-script> tags to their own folder.
+- Export the `<py-script\` tags to their own folder.
 
 # Known issues
 - The AI may not function properly at the end of the game. It is probably best to use your own intuition for the last 3 or so moves.
