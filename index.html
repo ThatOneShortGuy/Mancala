@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://pyscript.net/alpha/pyscript.css" />
+    <script type="text/javascript" src="https://code.jquery.com/jquery-3.5.1.min.js"></script> 
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.20.0/full/pyodide.js"></script>
+    <script defer type="text/javascript" src="scripts/script.js"></script>
+    <script defer type="text/javascript" src="https://pyscript.net/alpha/pyscript.js"></script>
+    <title>Mancala AI</title>
+    <py-env>
+        - numpy
+    </py-env>
+</head>
+<body>
+    <py-script>
+import numpy as np
+# from numba import njit
+
+# @njit
+def check(board):
+    return (np.sum(board, 1) == 0).any()
+
+# @njit
+def rotate_board(board):
+    return np.rot90(np.rot90(board))
+
+def create_board():
+    '''Create a board with 6 rows and 2 columns'''
+    return np.ones((2, 6), dtype=np.uint8) * 4
+
+def move(board, position, pieces=0, pit_additions=0):
+    '''Move stones from one positon around the board to another'''
+    if not pieces:
+        pieces = board[1, position]
+        if not pieces:
+            return board, 0, False, False
+        board[1, position] = 0
+    s = min(pieces, 6 - position)
+    board[1, position + 1: position+s+1] += 1
+    pieces -= s
+    if not pieces and position+s == 6:
+        return board, pit_additions + 1, False, True
+    if board[1, min(position+s, 5)] == 1 and not pieces and board[0, min(position+s, 5)]:
+        pit_additions += 1 + board[0, min(position+s, 5)]
+        board[:, min(position+s, 5)] = 0
+        return board, pit_additions, True, True
+    if pieces > 0:
+        pit_additions += 1
+        board[0, 6-min(pieces, 6):] += 1
+        pieces -= min(pieces, 6)
+        if pieces > 0:
+            board, pit_additions, _, _ = move(board, -1, pieces, pit_additions)
+
+    return board, pit_additions, True, True
+    </py-script>
+    <py-script>
+def printboard(board):
+    for i in range(len(board)):
+        for j in range(len(board[i])):
+            pyscript.write(f'{i},{j}', board[i, j])
+    pyscript.write('p1', p1)
+    pyscript.write('p2', p2)
+    pyscript.write('turn', 1 if player1+1 else 2)
+    </py-script>
+    <py-script>
+def minimax(board, depth, alpha=-50, beta=50, player=True):
+    if not depth:
+        return 0, 0
+    if check(board):
+        return [np.sum(board)]
+    scores = np.zeros(6, dtype=np.int16)
+    if player:
+        for i in reversed(range(6)):
+            if board[1, i] == 0:
+                scores[i] = 0
+                continue
+            a, score, change, valid = move(board.copy(), i)
+            if not valid:
+                continue
+            if change:
+                a = rotate_board(a)
+                score += min(minimax(a, depth-1, alpha, beta, not player))
+            else:
+                score += max(minimax(a, depth, alpha, beta, player))
+            scores[i] = score
+
+            alpha = max(alpha, score)
+            if beta <= alpha:
+                break
+    else:
+        for i in reversed(range(6)):
+            if board[1, i] == 0:
+                scores[i] = 0
+                continue
+            a, score, change, valid = move(board.copy(), i)
+            score *= -1
+            if not valid:
+                continue
+            if change:
+                a = rotate_board(a)
+                score += max(minimax(a, depth-1, alpha, beta, not player))
+            else:
+                score += min(minimax(a, depth, alpha, beta, player))
+            scores[i] = score
+
+            beta = min(beta, score)
+            if beta <= alpha:
+                break
+    return scores</py-script>
+    <h1>Mancala AI</h1>
+    <div id="words">
+        <p>
+            Here is the board with the stones in the mancala.
+            The player with the most stones in their mancala wins.
+        </p>
+        <p>
+            <strong>Player 1</strong> has <strong><label id="p1">0</label></strong> stones.<br>
+            <strong>Player 2</strong> has <strong><label id="p2">0</label></strong> stones.<br><br>
+            It is <strong>Player <label id="turn">1</label></strong>'s turn.
+        </p>
+        <div class="board">
+            <label id="0,0" class="pit"></label>
+            <label id="0,1" class="pit"></label>
+            <label id="0,2" class="pit"></label>
+            <label id="0,3" class="pit"></label>
+            <label id="0,4" class="pit"></label>
+            <label id="0,5" class="pit"></label>
+            <label id="1,0" class="pit"></label>
+            <label id="1,1" class="pit"></label>
+            <label id="1,2" class="pit"></label>
+            <label id="1,3" class="pit"></label>
+            <label id="1,4" class="pit"></label>
+            <label id="1,5" class="pit"></label>
+        </div>
+        <p>Best moves - <label id="parts"></label></p>
+    </div>
+    <py-script>
+from js import document
+from pyodide import create_proxy
+
+a = create_board()
+player1 = True
+p1 = p2 = 0
+printboard(a)
+pyscript.write('parts', list(minimax(a, 5)))
+def wrapper(index):
+    def inner(e):
+        print(e)
+        global a, player1, p1, p2
+        a, score, change, valid = move(a, index % 6)
+        if not valid:
+            return
+        if player1+1:
+            p1 += score
+        else:
+            p2 += score
+        if change:
+            player1 *= -1
+            a = rotate_board(a)
+        printboard(a)
+        pyscript.write('parts', 'Calculating...')
+        best = list(minimax(a,8) if p1 > 12 or p2 > 12 else list(minimax(a, 6)))
+        pyscript.write('parts', best)
+        if check(a):
+            mx = np.sum(a)
+            if player1+1:
+                p1 += mx
+            else:
+                p2 += mx
+            a *= 0
+            printboard(a)
+            if p1 > p2:
+                document.getElementById('words').innerHTML += '<p>Player 1 wins!</p>'
+            elif p2 > p1:
+                document.getElementById('words').innerHTML += '<p>Player 2 wins!</p>'
+            else:
+                document.getElementById('words').innerHTML += '<p>Draw!</p>'
+            
+    return inner
+
+pits = [document.getElementById(f'1,{i}') for i in range(6)]
+proxies = [create_proxy(wrapper(i)) for i in range(len(pits))]
+for i, pit in enumerate(pits):
+    pit.addEventListener("click", proxies[i])
+
+
+    </py-script>
+</body>
+</html>
